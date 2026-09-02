@@ -1,0 +1,121 @@
+openapi: 3.0.3
+info:
+  title: Mall Order API
+  version: 1.2.0
+paths:
+  /api/v1/orders:
+    get:
+      operationId: listOrders
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: page, in: query, schema: { type: integer, default: 1 } }
+        - { name: size, in: query, schema: { type: integer, default: 10 } }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/OrderPageResult' } } } }
+        "401": { $ref: '#/components/responses/Unauthorized' }
+    post:
+      operationId: createOrder
+      security: [{ bearerAuth: [] }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/CreateOrderRequest' } } } }
+      responses:
+        "201": { description: Created, content: { application/json: { schema: { $ref: '#/components/schemas/OrderResult' } } } }
+        "409": { description: Insufficient stock, content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } } }
+        "401": { $ref: '#/components/responses/Unauthorized' }
+  /api/v1/orders/{orderNo}:
+    get:
+      operationId: getOrder
+      security: [{ bearerAuth: [] }]
+      parameters: [{ name: orderNo, in: path, required: true, schema: { type: string } }]
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/OrderResult' } } } }
+        "401": { $ref: '#/components/responses/Unauthorized' }
+  /api/v1/orders/{orderNo}/pay:
+    post:
+      operationId: payOrder
+      security: [{ bearerAuth: [] }]
+      parameters: [{ name: orderNo, in: path, required: true, schema: { type: string } }]
+      responses:
+        "200": { description: Paid, content: { application/json: { schema: { $ref: '#/components/schemas/OrderResult' } } } }
+        "409": { description: Invalid state, content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } } }
+        "401": { $ref: '#/components/responses/Unauthorized' }
+  /api/v1/orders/{orderNo}/cancel:
+    post:
+      operationId: cancelOrder
+      security: [{ bearerAuth: [] }]
+      description: 仅 PENDING 订单可取消；取消后通过幂等补偿接口恢复库存（只回补一次）。
+      parameters: [{ name: orderNo, in: path, required: true, schema: { type: string } }]
+      responses:
+        "200": { description: Cancelled, content: { application/json: { schema: { $ref: '#/components/schemas/OrderResult' } } } }
+        "409": { description: Invalid state, content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } } }
+        "404": { description: Not owned or missing }
+        "401": { $ref: '#/components/responses/Unauthorized' }
+components:
+  securitySchemes:
+    bearerAuth: { type: http, scheme: bearer, bearerFormat: JWT }
+  schemas:
+    OrderStatus:
+      type: string
+      enum: [PENDING, PAID, SHIPPED, COMPLETED, CANCELLED]
+    OrderItemDTO:
+      type: object
+      required: [productId, productName, price, count]
+      properties:
+        productId: { type: integer, format: int64 }
+        productName: { type: string }
+        price: { type: number, format: double }
+        count: { type: integer, format: int32 }
+    OrderDTO:
+      type: object
+      required: [orderNo, status, totalAmount, createdAt]
+      properties:
+        orderNo: { type: string }
+        status: { $ref: '#/components/schemas/OrderStatus' }
+        totalAmount: { type: number, format: double }
+        addressId: { type: integer, format: int64, nullable: true }
+        receiverName: { type: string, nullable: true, description: 收货人快照，下单时固化 }
+        receiverPhone: { type: string, nullable: true }
+        receiverAddress: { type: string, nullable: true, description: 省市区+详址拼接快照 }
+        items:
+          type: array
+          nullable: true
+          description: 订单详情返回；列表接口为 null
+          items: { $ref: '#/components/schemas/OrderItemDTO' }
+        createdAt: { type: string, format: date-time }
+    CreateOrderRequest:
+      type: object
+      required: [productId, count, addressId]
+      properties:
+        productId: { type: integer, format: int64 }
+        count: { type: integer, format: int32, minimum: 1 }
+        addressId: { type: integer, format: int64, minimum: 1 }
+    OrderPageResult:
+      allOf:
+        - $ref: '#/components/schemas/Result'
+        - type: object
+          properties: { data: { $ref: '#/components/schemas/OrderListData' } }
+    OrderListData:
+      allOf:
+        - $ref: '#/components/schemas/PageResult'
+        - type: object
+          properties: { list: { type: array, items: { $ref: '#/components/schemas/OrderDTO' } } }
+    OrderResult:
+      allOf:
+        - $ref: '#/components/schemas/Result'
+        - type: object
+          properties: { data: { $ref: '#/components/schemas/OrderDTO' } }
+    ErrorResponse:
+      allOf:
+        - $ref: '#/components/schemas/Result'
+        - type: object
+          properties: { data: { nullable: true } }
+    Result:
+      type: object
+      required: [code, message]
+      properties: { code: { type: integer }, message: { type: string } }
+    PageResult:
+      type: object
+      properties:
+        list: { type: array, items: {} }
+        total: { type: integer, format: int64 }
+        page: { type: integer, format: int64 }
+        size: { type: integer, format: int32 }

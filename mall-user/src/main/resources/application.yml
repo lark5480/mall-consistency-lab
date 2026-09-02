@@ -1,0 +1,26 @@
+server:
+  port: 8081
+spring:
+  application:
+    name: mall-user
+  datasource:
+    url: ${DB_URL:jdbc:mysql://localhost:3306/mall_user?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai}
+    username: ${DB_USERNAME:root}
+    password: ${DB_PASSWORD:root}
+    driver-class-name: com.mysql.cj.jdbc.Driver
+  cloud:
+    nacos:
+      discovery:
+        server-addr: ${NACOS_ADDR:localhost:8848}
+mybatis-plus:
+  configuration:
+    map-underscore-to-camel-case: true
+# JWT 密钥缺失时启动即失败（JwtSecurityInitializer），不再静默降级到内置默认密钥
+mall:
+  jwt:
+    secret: ${JWT_SECRET:}
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health

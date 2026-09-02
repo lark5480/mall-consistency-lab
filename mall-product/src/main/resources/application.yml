@@ -1,0 +1,49 @@
+server:
+  port: 8082
+spring:
+  application:
+    name: mall-product
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+  datasource:
+    url: ${DB_URL:jdbc:mysql://localhost:3306/mall_product?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai}
+    username: ${DB_USERNAME:root}
+    password: ${DB_PASSWORD:root}
+    driver-class-name: com.mysql.cj.jdbc.Driver
+  cloud:
+    nacos:
+      discovery:
+        server-addr: ${NACOS_ADDR:localhost:8848}
+mybatis-plus:
+  configuration:
+    map-underscore-to-camel-case: true
+# 服务间 Feign 显式超时：不配置时默认 connect 10s / read 60s，故障会把调用方挂起分钟级
+feign:
+  client:
+    config:
+      default:
+        connect-timeout: 2000
+        read-timeout: 5000
+      # 对账任务串行查询订单状态，超时收紧避免一轮扫描被慢响应拖长
+      mall-order:
+        connect-timeout: 2000
+        read-timeout: 3000
+# JWT 密钥缺失时启动即失败（JwtSecurityInitializer），不再静默降级到内置默认密钥
+mall:
+  jwt:
+    secret: ${JWT_SECRET:}
+  cache:
+    product-ttl-minutes: 10
+  # 孤儿扣减对账：扣减超过 stale-minutes 仍无对应订单的记录，由任务自动回补库存
+  product:
+    reconcile-stale-minutes: ${RECONCILE_STALE_MINUTES:10}
+    reconcile-interval-ms: ${RECONCILE_INTERVAL_MS:300000}
+    reconcile-initial-delay-ms: ${RECONCILE_INITIAL_DELAY_MS:120000}
+    reconcile-retain-restored-days: ${RECONCILE_RETAIN_RESTORED_DAYS:7}
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health

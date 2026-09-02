@@ -1,0 +1,41 @@
+server:
+  port: 8083
+spring:
+  application:
+    name: mall-order
+  datasource:
+    url: ${DB_URL:jdbc:mysql://localhost:3306/mall_order?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai}
+    username: ${DB_USERNAME:root}
+    password: ${DB_PASSWORD:root}
+    driver-class-name: com.mysql.cj.jdbc.Driver
+  cloud:
+    nacos:
+      discovery:
+        server-addr: ${NACOS_ADDR:localhost:8848}
+mybatis-plus:
+  configuration:
+    map-underscore-to-camel-case: true
+
+# 服务间 Feign 显式超时：不配置时默认 connect 10s / read 60s，故障会把下单请求挂起分钟级
+feign:
+  client:
+    config:
+      default:
+        connect-timeout: 2000
+        read-timeout: 5000
+
+# 超时自动确认收货：发货 N 天后由定时任务置为已完成（演示环境可调小天数/周期观察）
+# JWT 密钥缺失时启动即失败（JwtSecurityInitializer），不再静默降级到内置默认密钥
+mall:
+  jwt:
+    secret: ${JWT_SECRET:}
+  order:
+    auto-complete-days: ${AUTO_COMPLETE_DAYS:7}
+    auto-complete-interval-ms: ${AUTO_COMPLETE_INTERVAL_MS:300000}
+    auto-complete-initial-delay-ms: ${AUTO_COMPLETE_INITIAL_DELAY_MS:60000}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health

@@ -1,0 +1,13 @@
+{
+  "name": "@mall/vue3-mall",
+  "private": true,
+  "scripts": { "dev": "vite", "build": "vue-tsc --noEmit && vite build" },
+  "dependencies": {
+    "@mall/shared": "workspace:*",
+    "axios": "1.6.8",
+    "pinia": "2.1.7",
+    "vant": "4.8.11",
+    "vue": "3.4.27",
+    "vue-router": "4.3.2"
+  }
+}

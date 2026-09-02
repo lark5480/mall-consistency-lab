@@ -1,0 +1,212 @@
+openapi: 3.0.3
+info:
+  title: Mall Admin API
+  version: 1.0.0
+  description: |
+    B 端管理接口：订单管理、运营统计、分类管理。全部要求 ADMIN 角色，
+    由网关对 /api/v1/admin/** 统一强制（普通 USER 返回 HTTP 403）。
+paths:
+  /api/v1/admin/orders:
+    get:
+      operationId: adminListOrders
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: page, in: query, schema: { type: integer, default: 1 } }
+        - { name: size, in: query, schema: { type: integer, default: 10 } }
+        - { name: status, in: query, required: false, schema: { $ref: '#/components/schemas/OrderStatus' } }
+        - { name: keyword, in: query, required: false, description: 按订单号模糊匹配, schema: { type: string } }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/OrderPageResult' } } } }
+        "403": { $ref: '#/components/responses/Forbidden' }
+        "401": { $ref: '#/components/responses/Unauthorized' }
+  /api/v1/admin/orders/{orderNo}:
+    get:
+      operationId: adminGetOrder
+      security: [{ bearerAuth: [] }]
+      parameters: [{ name: orderNo, in: path, required: true, schema: { type: string } }]
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/OrderResult' } } } }
+        "404": { description: Not found }
+        "403": { $ref: '#/components/responses/Forbidden' }
+        "401": { $ref: '#/components/responses/Unauthorized' }
+  /api/v1/admin/orders/{orderNo}/ship:
+    post:
+      operationId: adminShipOrder
+      security: [{ bearerAuth: [] }]
+      parameters: [{ name: orderNo, in: path, required: true, schema: { type: string } }]
+      responses:
+        "200": { description: Shipped, content: { application/json: { schema: { $ref: '#/components/schemas/OrderResult' } } } }
+        "409": { description: Only PAID orders can be shipped }
+        "403": { $ref: '#/components/responses/Forbidden' }
+        "401": { $ref: '#/components/responses/Unauthorized' }
+  /api/v1/admin/stats/orders:
+    get:
+      operationId: adminOrderStats
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/OrderStatsResult' } } } }
+        "403": { $ref: '#/components/responses/Forbidden' }
+        "401": { $ref: '#/components/responses/Unauthorized' }
+  /api/v1/admin/stats/products:
+    get:
+      operationId: adminProductStats
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/ProductStatsResult' } } } }
+        "403": { $ref: '#/components/responses/Forbidden' }
+        "401": { $ref: '#/components/responses/Unauthorized' }
+  /api/v1/admin/categories:
+    post:
+      operationId: adminCreateCategory
+      security: [{ bearerAuth: [] }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/CategorySaveRequest' } } } }
+      responses:
+        "200": { description: Created, content: { application/json: { schema: { $ref: '#/components/schemas/CategoryResult' } } } }
+        "409": { description: Name duplicated }
+        "403": { $ref: '#/components/responses/Forbidden' }
+        "401": { $ref: '#/components/responses/Unauthorized' }
+  /api/v1/admin/categories/{categoryId}:
+    put:
+      operationId: adminUpdateCategory
+      security: [{ bearerAuth: [] }]
+      parameters: [{ name: categoryId, in: path, required: true, schema: { type: integer, format: int64 } }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/CategorySaveRequest' } } } }
+      responses:
+        "200": { description: Updated, content: { application/json: { schema: { $ref: '#/components/schemas/CategoryResult' } } } }
+        "404": { description: Not found }
+        "409": { description: Name duplicated }
+        "403": { $ref: '#/components/responses/Forbidden' }
+        "401": { $ref: '#/components/responses/Unauthorized' }
+    delete:
+      operationId: adminDeleteCategory
+      security: [{ bearerAuth: [] }]
+      parameters: [{ name: categoryId, in: path, required: true, schema: { type: integer, format: int64 } }]
+      responses:
+        "200": { description: Deleted }
+        "409": { description: Category still referenced by products }
+        "403": { $ref: '#/components/responses/Forbidden' }
+        "401": { $ref: '#/components/responses/Unauthorized' }
+components:
+  securitySchemes:
+    bearerAuth: { type: http, scheme: bearer, bearerFormat: JWT }
+  responses:
+    Unauthorized:
+      description: Unauthorized
+      content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } }
+    Forbidden:
+      description: Admin role required
+      content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } }
+  schemas:
+    OrderStatus:
+      type: string
+      enum: [PENDING, PAID, SHIPPED, COMPLETED, CANCELLED]
+    OrderItemDTO:
+      type: object
+      required: [productId, productName, price, count]
+      properties:
+        productId: { type: integer, format: int64 }
+        productName: { type: string }
+        price: { type: number, format: double }
+        count: { type: integer, format: int32 }
+    OrderDTO:
+      type: object
+      required: [orderNo, status, totalAmount, createdAt]
+      properties:
+        orderNo: { type: string }
+        status: { $ref: '#/components/schemas/OrderStatus' }
+        totalAmount: { type: number, format: double }
+        userId: { type: integer, format: int64, description: 仅 B 端接口返回 }
+        addressId: { type: integer, format: int64, nullable: true }
+        receiverName: { type: string, nullable: true }
+        receiverPhone: { type: string, nullable: true }
+        receiverAddress: { type: string, nullable: true }
+        items:
+          type: array
+          nullable: true
+          description: 详情接口返回；列表接口为 null 以减少载荷
+          items: { $ref: '#/components/schemas/OrderItemDTO' }
+        createdAt: { type: string, format: date-time }
+    CategoryDTO:
+      type: object
+      required: [id, name]
+      properties:
+        id: { type: integer, format: int64 }
+        name: { type: string, maxLength: 50 }
+    CategorySaveRequest:
+      type: object
+      required: [name]
+      properties:
+        name: { type: string, minLength: 1, maxLength: 50 }
+    TrendPoint:
+      type: object
+      required: [date, count, gmv]
+      properties:
+        date: { type: string, format: date }
+        count: { type: integer, format: int64 }
+        gmv: { type: number, format: double }
+    OrderStatsDTO:
+      type: object
+      required: [todayCount, todayGmv, totalCount, totalGmv, pendingShipCount, trend]
+      properties:
+        todayCount: { type: integer, format: int64 }
+        todayGmv: { type: number, format: double }
+        totalCount: { type: integer, format: int64 }
+        totalGmv: { type: number, format: double }
+        pendingShipCount: { type: integer, format: int64, description: PAID 待发货订单数 }
+        trend:
+          type: array
+          items: { $ref: '#/components/schemas/TrendPoint' }
+    ProductStatsDTO:
+      type: object
+      required: [totalCount, onSaleCount, offSaleCount, lowStockCount]
+      properties:
+        totalCount: { type: integer, format: int64 }
+        onSaleCount: { type: integer, format: int64 }
+        offSaleCount: { type: integer, format: int64 }
+        lowStockCount: { type: integer, format: int64, description: 库存 < 10 的在售商品数 }
+    OrderPageResult:
+      allOf:
+        - $ref: '#/components/schemas/Result'
+        - type: object
+          properties: { data: { $ref: '#/components/schemas/OrderListData' } }
+    OrderListData:
+      allOf:
+        - $ref: '#/components/schemas/PageResult'
+        - type: object
+          properties: { list: { type: array, items: { $ref: '#/components/schemas/OrderDTO' } } }
+    OrderResult:
+      allOf:
+        - $ref: '#/components/schemas/Result'
+        - type: object
+          properties: { data: { $ref: '#/components/schemas/OrderDTO' } }
+    CategoryResult:
+      allOf:
+        - $ref: '#/components/schemas/Result'
+        - type: object
+          properties: { data: { $ref: '#/components/schemas/CategoryDTO' } }
+    OrderStatsResult:
+      allOf:
+        - $ref: '#/components/schemas/Result'
+        - type: object
+          properties: { data: { $ref: '#/components/schemas/OrderStatsDTO' } }
+    ProductStatsResult:
+      allOf:
+        - $ref: '#/components/schemas/Result'
+        - type: object
+          properties: { data: { $ref: '#/components/schemas/ProductStatsDTO' } }
+    ErrorResponse:
+      allOf:
+        - $ref: '#/components/schemas/Result'
+        - type: object
+          properties: { data: { nullable: true } }
+    Result:
+      type: object
+      required: [code, message]
+      properties: { code: { type: integer }, message: { type: string } }
+    PageResult:
+      type: object
+      properties:
+        list: { type: array, items: {} }
+        total: { type: integer, format: int64 }
+        page: { type: integer, format: int64 }
+        size: { type: integer, format: int32 }

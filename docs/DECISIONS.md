@@ -1,0 +1,43 @@
+# 决策日志
+
+- [步骤1] 决定：采用 Maven 多模块 + pnpm workspace，严格按 PRD 锁定版本 | 备选：单模块后端或 Nx monorepo | 理由：PRD 明确要求服务边界与共享类型。
+- [步骤1] 决定：本机 JDK 21 仅用于编译 Java 17 字节码，交付配置保持 release=17；Node 24 / pnpm 11 用于验证前端 | 备选：等待安装 JDK 17 与 Node 20 | 理由：PRD 要求不安装缺失环境，编译目标仍锁定 17。
+- [步骤3] 决定：库存乐观锁重试 3 次，每次读取最新 version；三次失败返回业务冲突 | 备选：分布式锁或无限重试 | 理由：学习项目保持简单且可避免长时间阻塞。
+- [步骤3] 决定：product 库使用 stock_dedup_log 表以 orderNo 做幂等记录；先查询已成功记录，扣减成功后写入同事务日志 | 备选：Redis SETNX | 理由：数据库表与扣减事务一致性更直观，重启后语义不丢失。
+- [步骤3] 决定：JWT_SECRET 通过环境变量注入并提供仅本地演示默认值；数据库地址同样走环境变量 | 备选：Nacos 配置中心托管敏感项 | 理由：满足 PRD 配置红线并降低学习项目启动成本。
+- [步骤3] 决定：order 调用 product 内部接口失败时直接抛业务错误，不做自动重试 | 备选：Feign 重试或降级缓存 | 理由：下单必须确认实时库存，静默降级可能超卖。
+- [步骤3] 决定：order 服务手写 ProductDTO，不依赖 mall-product 模块 | 备选：抽取共享 Java DTO 模块 | 理由：保持服务间只通过 Feign 契约耦合。
+- [步骤5] 决定：pnpm 11 的依赖脚本审批通过项目本地配置与一次显式 approve-builds 完成 | 备选：全局关闭审批 | 理由：保留 pnpm 安全边界且不影响 CI。
+- [步骤7] 决定：不真实启动完整 Docker 栈，仅做 Compose 解析和构建产物自检 | 备选：本机启动全部容器并执行人工走查 | 理由：避免对本地端口和数据卷造成影响；限制已写入验收文档。
+- [步骤7] 决定：父 POM 默认跳过 repackage，四个服务模块显式启用 | 备选：每个模块独立声明完整插件执行 | 理由：保证 common 模块输出普通库，同时服务模块生成 Docker 所需 fat jar。
+- [部署修复] 决定：项目 .env 设置 COMPOSE_BAKE=false，绕过 Docker Compose 2.40.3 + Rancher Desktop 1.21.0 下默认 Bake 构建的 panic | 备选：升级 Rancher Desktop / 安装 buildx 插件 | 理由：传统 Compose builder 已实测可成功构建镜像；该变量在新版 Compose 中会有废弃警告。
+- [部署修复] 决定：Nacos 健康检查从 wget 改为 curl | 备选：TCP 探针或安装工具 | 理由：nacos/nacos-server:v2.3.2 实测包含 curl 但不包含 wget，原探针导致服务误判 unhealthy。
+- [部署修复] 决定：网关补充 LoadBalancer 依赖，业务应用扫描 com.mall.common | 备选：在每个服务重复注册异常处理或改用直连 URL | 理由：修复 lb:// 实例解析 503，并让统一响应/异常处理真正生效。
+- [部署修复] 决定：注册接口 User 实体改为可变 Java Bean | 备选：继续使用 record 并自定义 id 回填 | 理由：MyBatis-Plus 自增主键回填依赖 setter，record 导致插入后 500。
+- [部署修复] 决定：三份初始化 SQL 开头增加 SET NAMES utf8mb4，并重建 MySQL 数据卷 | 备选：运行时逐条 UPDATE 修复乱码 | 理由：初始化客户端会话缺少 UTF-8 声明导致种子数据二次编码；从根上保证新环境初始化正确。
+- [v1.1加固] 决定：网关过滤器对全部请求（含公开路径）先剥离外部 X-User-Id，鉴权通过后再写入可信值；ADMIN 校验路径条件由 `/api/v1/products/` 改为 `/api/v1/products` 前缀 | 备选：仅在鉴权分支剥离 | 理由：原实现在公开路径上放行外部伪造头，且 `POST /api/v1/products`（创建）不匹配带斜杠前缀、绕过角色校验。
+- [v1.1加固] 决定：下单流程调整为「生成 orderNo → 幂等扣库存 → 持久化订单」，持久化失败调用内部 restore 接口补偿 | 备选：先存单后扣减，靠本地事务回滚兜底 | 理由：与完善计划一致；dedup 日志 DEDUCTED→RESTORED 状态机保证补偿幂等，只恢复一次。
+- [v1.1加固] 决定：商品服务返回的 HTTP 409 按响应体 code 翻译——40001 映射 INSUFFICIENT_STOCK(409 库存不足)，其余映射 CONFLICT(message) | 备选：Feign 异常一律报系统错误 | 理由：库存不足是预期业务结果，必须以正确语义透传给 C 端提示。
+- [v1.1加固] 决定：admin/admin123 种子哈希经 spring-security-crypto 6.2.4 实测 matches=true 后保留；demo 占位哈希替换为真实 BCrypt('123456') 使种子账号可登录 | 备选：维持占位串并注明不可登录 | 理由：本机可离线生成真实哈希，人工走查需要可用账号。
+- [v1.1加固] 决定：迁移脚本改名为 zz-migration-v1.1.sql 并用 INFORMATION_SCHEMA + PREPARE 幂等化 | 备选：保留原名的裸 ALTER TABLE | 理由：docker-entrypoint-initdb.d 按文件名字母序执行 SQL，原脚本在全新卷上会先于建表执行而失败；旧卷上重复执行也会报错。
+- [v1.1加固] 决定：后台权限改为登录时持久化 mall_user(JSON 含 role)，路由守卫容错读取并要求 ADMIN；弃用前端 atob 解码 JWT 的方案 | 备选：守卫内 base64url 解码 JWT payload | 理由：JWT payload 为 base64url，含 -/_ 时 atob 直接抛异常，且守卫内的 JSON.parse 需要独立容错。
+- [v1.1加固] 决定：C 端新增 /orders「我的订单」页（分页列表 + PENDING 订单模拟支付），首页加 Tabbar 入口；OrderConfirm 下单成功后跳转订单页而非自动支付 | 备选：维持下单即自动支付并跳首页 | 理由：补齐验收清单中「订单列表分页可见」长期只有 API 没有 UI 的缺口，也让模拟支付成为用户可见操作。
+- [v1.1加固] 决定：mall-gateway 补充 spring-boot-starter-actuator 与 compose wget healthcheck | 备选：TCP 探活 | 理由：计划要求四个业务服务均有 healthcheck，网关此前缺失；Actuator 语义与其余服务一致。
+- [联调修复] 决定：mall-order 补充 MyBatis-Plus PaginationInnerInterceptor 配置（对齐 mall-product）| 备选：手写 LIMIT/COUNT SQL | 理由：真实联调发现订单列表 total=0 且不分页——无分页拦截器时 MP 的 selectPage 不执行 COUNT/LIMIT；单测 mock 掉 Mapper 故未暴露。
+- [联调修复] 决定：zz-migration-v1.1.sql 增加两条脏数据兼容 UPDATE：旧卷中已存在同名 admin 时强制提权为 ADMIN 并重置密码哈希；demo 仅当仍为旧占位哈希时重置为 BCrypt('123456') | 备选：仅 INSERT IF NOT EXISTS | 理由：真实旧卷中 admin 是早期注册产生的 USER 账号，纯 INSERT 会跳过导致验收无法登录管理员；demo 同理仍是不可登录的占位串。
+- [联调修复] 决定：admin 登录页为 el-form 绑定 ref="formRef" 并将校验改为 validate().then/catch | 备选：移除表单校验直接提交 | 理由：原代码从未绑定 formRef，`formRef.value?.validate()` 恒为 undefined 导致点登录静默返回、连请求都不发出（「登录无反应」的根因，属项目初始遗留 bug）。
+- [联调修复] 决定：「我的订单」导航栏返回箭头改为固定跳转首页 router.push('/') | 备选：保留 history.back() 并把 Tabbar 改为 push 模式 | 理由：Tabbar 用 replace 进入订单页时首页历史被替换，back 会落回登录页；显式回首页语义可预期且不膨胀历史栈。
+- [v1.2] 决定：下单时由 mall-order 经 Feign 调 mall-user 内部接口 `GET /internal/users/{userId}/addresses/{addressId}` 取地址，并在 order 表固化 receiver_name/phone/address 三列快照 | 备选：仅存 address_id 跨库 join，或 C 端直接提交收货人字段 | 理由：跨库不做 join、防止客户端伪造收货信息、地址后续修改不影响历史订单。
+- [v1.2] 决定：取消订单采用「先幂等回补库存、后落 CANCELLED 状态」顺序——restore 抛异常则中止取消保持 PENDING；restore 返回 false 视为幂等空操作放行 | 备选：先改状态再尽力回补 | 理由：与 v1.1「先扣减后落库、失败即补偿」对称；避免出现已取消但库存未回补的更难收敛状态，重试路径天然收敛。
+- [v1.2] 决定：`/api/v1/admin/**` 全路径由网关 JWT 过滤器强制 role=ADMIN（403），路由表按 admin-product / admin-order 拆分指向两个服务 | 备选：各下游服务自行读角色校验 | 理由：鉴权口径继续集中在网关一处，服务内零重复实现；与既有 products 写接口 ADMIN 校验同一机制。
+- [v1.2] 决定：B 端 AdminHome 静态卡片页废弃，重构为 AdminLayout（el-container + el-menu 侧边导航）+ dashboard/products/categories/orders 四个子路由 | 备选：在旧页面堆叠入口按钮 | 理由：管理模块从一个增至四个，需要稳定的导航壳承载后续扩展。
+- [v1.2] 决定：看板统计口径排除 CANCELLED 订单（GMV 与趋势一致）；趋势在 SQL 层 `GROUP BY DATE(created_at)` 聚合，服务端对缺失日期补零返回固定 7 个点 | 备选：内存遍历全量订单聚合 | 理由：聚合下沉数据库、前端拿到的即是可直接渲染的等长序列。
+- [v1.2] 决定：地址簿首条地址强制设为默认；显式设默认时同用户其余地址事务内清零 | 备选：允许无默认地址 | 理由：保证订单确认页始终有可用选中项，语义清晰。
+- [v1.2] 决定：用户名注册后不可修改，「我的」编辑资料仅开放 phone/email/avatar 且头像只存图片 URL | 备选：开放改名或做文件上传 | 理由：username 是登录标识与唯一键，改名牵连 token/展示一致性；文件上传引入 OSS 依赖超出学习项目边界。
+- [v1.4加固] 决定：取消订单顺序由 v1.2 的「先幂等回补库存、后 CAS 落 CANCELLED」**反转**为「先 CAS 落终态、再尽力回补（失败仅告警）」 | 备选：维持 v1.2 顺序 | 理由：code review 发现原顺序存在竞态——回补成功后、CAS 之前并发 pay 抢先成功，则库存已回补且 dedup 已 RESTORED，再无任何机制扣回，形成"PAID 订单 + 凭空多出的库存"；先 CAS 后支付/取消必有一个赢家。配套：内部确认接口从 `/exists` 升级为 `/state`（返回 exists+status），对账任务仅对"订单不存在或已 CANCELLED"回补，状态不明一律跳过。
+- [v1.4加固] 决定：decreaseStock 改为「先插 stock_dedup_log 占住唯一键、再扣库存」，幂等表先行仲裁；restoreStock 改为条件翻转 DEDUCTED→RESTORED 抢占回补权并使用落库记录的数量 | 备选：维持先扣减后插表并吞 DuplicateKeyException | 理由：原顺序下同 orderNo 并发重试会以新版本二次扣减成功后撞唯一键，吞掉异常即同单号双重扣库存；先占位后任何失败整体回滚、抢锁失败方零净效果，回补闸门也不再依赖隔离级别。
+- [v1.4加固] 决定：JwtUtil 移除内置兜底密钥，由 JwtSecurityInitializer 在启动时校验 JWT_SECRET（缺失/强度不足直接启动失败），各服务 application.yml 增加 `mall.jwt.secret: ${JWT_SECRET:}` | 备选：保留本地演示默认值 | 理由：生产漏配时静默降级到可猜测的固定密钥属高危；compose 已向全部服务注入 JWT_SECRET，本地裸跑需显式 export，失败信息明确指出缺哪个配置。
+- [v1.4加固] 决定：GlobalExceptionHandler 标注 `@ConditionalOnWebApplication(SERVLET)` | 备选：缩小网关的 scanBasePackages | 理由：servlet 栈的 @RestControllerAdvice 会被 WebFlux 网关扫描注册，Exception 兜底覆盖网关 ResponseStatusException 语义（无路由 404、找不到实例 503 被转成 500）。
+- [v1.4加固] 决定：内部库存接口补 `@Valid`/`@Min(1)`/`@NotBlank`；Feign 显式超时（默认 2s/5s，对账 client 2s/3s）；网关 globalcors 统一应答 CORS；新增 zz-migration-v1.4.sql 补 order(created_at/status/status+updated_at) 与 stock_dedup_log(status+created_at) 索引；对账扫描补 ORDER BY 并清理超期 RESTORED 记录 | 备选：维持默认值 | 理由：负数 count 可绕过库存检查直接增加库存；OpenFeign 默认 read 60s 会把调用方挂起分钟级；全仓此前无 CORS 处理，前端跨域 preflight 必失败；对账扫描与统计接口缺索引、去重表无清理会随订单量退化。
+- [v1.5升级] 决定：Spring Boot 3.2.4→3.5.16、Spring Cloud 2023.0.1→2025.0.3、Spring Cloud Alibaba 2023.0.1.0→2025.0.0.0、MyBatis-Plus 3.5.5→3.5.17（新增 mybatis-plus-jsqlparser 模块）、jjwt 0.12.5→0.12.7、Java 17→21（含 4 个 Dockerfile 基镜像与 CI setup-java） | 备选：维持 3.2.x 或直接跳 Boot 4.0 | 理由：3.2.x OSS 已于 2024-12 EOL，无 CVE 补丁；组合依据 SCA 官方适配矩阵（SCA 2025.0.0.0 → SC 2025.0.x → Boot 3.5.x，nacos-client 3.0.3 ↔ compose 升级到 nacos-server v3.0.3）；Boot 4.0 需要全生态跟进（SC 2025.1/SCA 2025.1.0.0/nacos-client 3.1），学习项目收益不成比例。配套：gateway starter 更名 spring-cloud-starter-gateway → gateway-server-webflux；MP 分页拦截器依赖拆分需成对引入 jsqlparser。
+- [v1.5测试] 决定：新增 Testcontainers 集成测试（mall-product，真实 MySQL 8.0.36 + Redis 7.2，@ServiceConnection 接线，容器内挂载 docs/sql/product-schema.sql 初始化）覆盖：同单号 16 线程并发扣减恰好扣一次、8 线程并发回补幂等、对账孤儿回补/正常订单不误补、库存路径事务提交后缓存失效 | 备选：仅保留 Mockito 单测 | 理由：两个库存一致性 P0 bug 均为并发竞态，mock 单测无法复现真实 DB 事务/锁/唯一键语义；集成测试是修复的回归防线。无 Docker 环境自动跳过（disabledWithoutDocker），CI ubuntu runner 真实执行。踩坑记录：测试容器不能挂 zz-migration-* 脚本（其 USE mall_user 假设多库共存，单库容器 init 即 exit 1），只挂自包含的 product-schema.sql。

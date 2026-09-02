@@ -1,0 +1,16 @@
+{
+  "name": "mall-consistency-lab-frontend",
+  "private": true,
+  "scripts": {
+    "build": "pnpm -r build",
+    "typecheck": "pnpm -r exec vue-tsc --noEmit"
+  },
+  "devDependencies": {
+    "@types/node": "20.12.12",
+    "@vitejs/plugin-vue": "5.0.4",
+    "js-yaml": "4.1.0",
+    "typescript": "5.4.5",
+    "vite": "5.2.11",
+    "vue-tsc": "2.0.19"
+  }
+}

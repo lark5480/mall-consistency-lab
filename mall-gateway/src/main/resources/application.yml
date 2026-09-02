@@ -1,0 +1,43 @@
+server:
+  port: 8080
+spring:
+  application:
+    name: mall-gateway
+  cloud:
+    nacos:
+      discovery:
+        server-addr: ${NACOS_ADDR:localhost:8848}
+    gateway:
+      globalcors:
+        # 前后端分离：CORS（含 preflight）统一在网关应答，下游服务不再各自处理
+        cors-configurations:
+          '[/**]':
+            allowedOriginPatterns: "http://localhost:*"
+            allowedMethods: "GET,POST,PUT,DELETE,OPTIONS"
+            allowedHeaders: "*"
+            maxAge: 3600
+      routes:
+        - id: user-auth
+          uri: lb://mall-user
+          predicates: [ "Path=/api/v1/auth/**,/api/v1/users/**" ]
+        - id: admin-product
+          uri: lb://mall-product
+          predicates: [ "Path=/api/v1/admin/categories/**,/api/v1/admin/stats/products" ]
+        - id: admin-order
+          uri: lb://mall-order
+          predicates: [ "Path=/api/v1/admin/orders/**,/api/v1/admin/stats/orders" ]
+        - id: product-service
+          uri: lb://mall-product
+          predicates: [ "Path=/api/v1/products/**,/api/v1/categories/**" ]
+        - id: order-service
+          uri: lb://mall-order
+          predicates: [ "Path=/api/v1/orders/**" ]
+# JWT 密钥缺失时网关启动即失败（JwtSecurityInitializer），不再静默降级到内置默认密钥
+mall:
+  jwt:
+    secret: ${JWT_SECRET:}
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health

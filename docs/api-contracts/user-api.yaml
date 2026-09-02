@@ -1,0 +1,143 @@
+openapi: 3.0.3
+info:
+  title: Mall User API
+  version: 1.0.0
+  description: |
+    个人信息与收货地址。所有接口需登录（网关校验 JWT 并注入 X-User-Id）。
+    用户名注册后不可修改；头像本期仅支持图片 URL 字符串，不做文件上传。
+paths:
+  /api/v1/users/me:
+    get:
+      operationId: getMyProfile
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/ProfileResult' } } } }
+        "401": { $ref: '#/components/responses/Unauthorized' }
+    put:
+      operationId: updateMyProfile
+      security: [{ bearerAuth: [] }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/UpdateProfileRequest' } } } }
+      responses:
+        "200": { description: Updated, content: { application/json: { schema: { $ref: '#/components/schemas/ProfileResult' } } } }
+        "401": { $ref: '#/components/responses/Unauthorized' }
+  /api/v1/users/me/password:
+    put:
+      operationId: changeMyPassword
+      security: [{ bearerAuth: [] }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/ChangePasswordRequest' } } } }
+      responses:
+        "200": { description: Changed }
+        "409": { description: Old password mismatch, content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } } }
+        "401": { $ref: '#/components/responses/Unauthorized' }
+  /api/v1/users/me/addresses:
+    get:
+      operationId: listMyAddresses
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/AddressListResult' } } } }
+        "401": { $ref: '#/components/responses/Unauthorized' }
+    post:
+      operationId: createMyAddress
+      security: [{ bearerAuth: [] }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/AddressSaveRequest' } } } }
+      responses:
+        "200": { description: Created, content: { application/json: { schema: { $ref: '#/components/schemas/AddressResult' } } } }
+        "400": { description: Invalid request }
+        "401": { $ref: '#/components/responses/Unauthorized' }
+  /api/v1/users/me/addresses/{addressId}:
+    put:
+      operationId: updateMyAddress
+      security: [{ bearerAuth: [] }]
+      parameters: [{ name: addressId, in: path, required: true, schema: { type: integer, format: int64 } }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/AddressSaveRequest' } } } }
+      responses:
+        "200": { description: Updated, content: { application/json: { schema: { $ref: '#/components/schemas/AddressResult' } } } }
+        "404": { description: Not owned or missing }
+        "401": { $ref: '#/components/responses/Unauthorized' }
+    delete:
+      operationId: deleteMyAddress
+      security: [{ bearerAuth: [] }]
+      parameters: [{ name: addressId, in: path, required: true, schema: { type: integer, format: int64 } }]
+      responses:
+        "200": { description: Deleted }
+        "404": { description: Not owned or missing }
+        "401": { $ref: '#/components/responses/Unauthorized' }
+components:
+  securitySchemes:
+    bearerAuth: { type: http, scheme: bearer, bearerFormat: JWT }
+  responses:
+    Unauthorized:
+      description: Unauthorized
+      content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } }
+  schemas:
+    UserProfile:
+      type: object
+      required: [userId, username, role]
+      properties:
+        userId: { type: integer, format: int64 }
+        username: { type: string }
+        phone: { type: string, nullable: true }
+        email: { type: string, nullable: true }
+        avatar: { type: string, nullable: true }
+        role: { type: string, enum: [USER, ADMIN] }
+        createdAt: { type: string, format: date-time }
+    UpdateProfileRequest:
+      type: object
+      properties:
+        phone: { type: string, maxLength: 20, nullable: true }
+        email: { type: string, format: email, maxLength: 100, nullable: true }
+        avatar: { type: string, maxLength: 255, nullable: true }
+    ChangePasswordRequest:
+      type: object
+      required: [oldPassword, newPassword]
+      properties:
+        oldPassword: { type: string, minLength: 6 }
+        newPassword: { type: string, minLength: 6, maxLength: 64 }
+    AddressDTO:
+      type: object
+      required: [id, receiver, phone, province, city, district, detail, isDefault]
+      properties:
+        id: { type: integer, format: int64 }
+        receiver: { type: string }
+        phone: { type: string }
+        province: { type: string }
+        city: { type: string }
+        district: { type: string }
+        detail: { type: string }
+        isDefault: { type: boolean }
+        createdAt: { type: string, format: date-time }
+    AddressSaveRequest:
+      type: object
+      required: [receiver, phone, province, city, district, detail]
+      properties:
+        receiver: { type: string, minLength: 1, maxLength: 50 }
+        phone: { type: string, minLength: 5, maxLength: 20 }
+        province: { type: string, minLength: 1, maxLength: 30 }
+        city: { type: string, minLength: 1, maxLength: 30 }
+        district: { type: string, minLength: 1, maxLength: 30 }
+        detail: { type: string, minLength: 1, maxLength: 200 }
+        isDefault: { type: boolean, default: false }
+    ProfileResult:
+      allOf:
+        - $ref: '#/components/schemas/Result'
+        - type: object
+          properties: { data: { $ref: '#/components/schemas/UserProfile' } }
+    AddressResult:
+      allOf:
+        - $ref: '#/components/schemas/Result'
+        - type: object
+          properties: { data: { $ref: '#/components/schemas/AddressDTO' } }
+    AddressListResult:
+      allOf:
+        - $ref: '#/components/schemas/Result'
+        - type: object
+          properties: { data: { type: array, items: { $ref: '#/components/schemas/AddressDTO' } } }
+    ErrorResponse:
+      allOf:
+        - $ref: '#/components/schemas/Result'
+        - type: object
+          properties: { data: { nullable: true } }
+    Result:
+      type: object
+      required: [code, message]
+      properties: { code: { type: integer }, message: { type: string } }
