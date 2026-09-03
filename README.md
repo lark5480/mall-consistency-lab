@@ -5,7 +5,7 @@
 
 一个以**跨服务数据一致性为核心设计目标**的 Spring Cloud 微服务电商系统：不借助 Seata/MQ 等框架黑盒，手写实现「下单远程扣库存 → 本地落单 → 失败补偿 → 定时对账」的完整 Saga 闭环，并用并发集成测试验证。包含网关鉴权、用户、商品、订单全链路 + B/C 两端前端 + CI + OpenAPI 契约。
 
-> 定位说明：这是学习/简历项目。它的价值不在功能广度，而在于**每个一致性决策都写得出为什么**——见 [docs/DECISIONS.md](docs/DECISIONS.md)（40+ 条带备选方案与理由的决策记录）与 [docs/CONSISTENCY.md](docs/CONSISTENCY.md)（六道防线逐条对应到代码行）。
+> 定位说明：这是学习/简历项目。它的价值不在功能广度，而在于**每个一致性决策都写得出为什么**——见 [docs/DECISIONS.md](docs/DECISIONS.md)（40+ 条带备选方案与理由的决策记录）与 [docs/CONSISTENCY.md](docs/CONSISTENCY.md)（六道防线逐条对应到代码行）；与 GitHub 现存 mall 项目的差异化声明见 [docs/ECOSYSTEM.md](docs/ECOSYSTEM.md)。
 
 ## 核心设计：没有 Seata，凭什么数据不会乱
 
