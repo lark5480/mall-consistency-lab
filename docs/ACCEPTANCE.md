@@ -21,6 +21,15 @@
 - 发货与看板：admin 发货 PAID→SHIPPED；`/api/v1/admin/stats/orders` 看板 GMV=5998(本次)+2999(种子)=8997，已取消订单正确不计入。
 - 说明：走查经网关 `localhost:8080` 执行；本机 6379 被其他 Redis 占用，compose 已支持 `REDIS_HOST_PORT` 覆盖宿主机映射（容器内仍 6379）。B/C 前端页面走查（清单 1-3、10-12、16 的 UI 部分）需浏览器人工执行。
 
+## 混沌测试（2026-09-03，P0 Roadmap 兑现）
+
+`bash scripts/chaos-test.sh 3 12`（栈以 `RECONCILE_STALE_MINUTES=1 RECONCILE_INTERVAL_MS=15000` 加速对账启动）：
+
+- 故障注入：36 个下单请求（随机支付/取消混合）的执行期间，3 轮随机时机 `docker kill` order-service 并自动拉起（每轮宕机约 15-20 秒，落点覆盖下单高峰）。
+- 实测：第 1 轮 kill 砸中流量高峰（12 请求仅 2 单确认），10 个「已扣库存、订单未落库」的孤儿扣减全部由对账任务自动回补。
+- 不变式全过：**I1 库存台账**（stock 变化 −16 == −ΔDEDUCTED 合计，跨杀服务/回补/对账三种路径守恒）；**I2 无孤儿扣减**（全表无 DEDUCTED 行对应缺失或已取消订单）；**I3 下单闭环**（14 个确认订单全部有去重行且状态一致）。
+- 结论：「极端进程崩溃窗口靠 ERROR 日志暴露」的已知限制升级为「崩溃后由对账任务收敛，且有脚本可重复证明」。脚本手动执行，不进 CI 阻塞链（杀容器测试在共享 runner 上不稳定）。
+
 ## 人工走查清单
 
 1. 注册新用户
@@ -66,7 +75,7 @@
 - 本机 JDK 为 21、Node 为 24、pnpm 为 11.x，非 PRD 建议版本；CI 中仍声明 Node 20 / pnpm 9。pnpm 11 需在 `pnpm-workspace.yaml` 的 `allowBuilds` 中放行 vue-demi/esbuild 构建脚本（pnpm 9 无此拦截，CI 不受影响）。
 - 旧 MySQL 数据卷（含改名前的 `mall-learning_mysql-data`）需执行一次 `docs/sql/zz-migration-v1.4.sql`（可重复执行）；改名后 compose 新建 `mall-consistency-lab_mysql-data` 全新卷，迁移脚本自动生效。
 - 存量 JWT 无 role claim：旧 token 需重新登录才能获得 ADMIN 语义（守卫读取的 mall_user 也随登录刷新）。
-- 跨服务库存一致性采用幂等扣减 + 状态查询 + 补偿恢复，不引入分布式事务框架；极端进程崩溃窗口靠 ERROR 日志暴露，作为学习项目限制。
+- 跨服务库存一致性采用幂等扣减 + 状态查询 + 补偿恢复，不引入分布式事务框架；进程崩溃窗口由定时对账兜底收敛（2026-09-03 起有混沌测试脚本可重复验证，见上节）。
 - 支付为模拟实现；发货仅流转订单状态，不填物流单号，无超时自动关单。
 - v1.2 起收货地址为真实服务（mall_user.address 表），历史遗留订单的 address_id 仍指向旧静态数据属正常现象；新订单均含 receiver_* 快照列。
 - 头像与商品图片均为 URL 字符串，不做文件上传/OSS。
