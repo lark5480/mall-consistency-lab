@@ -76,7 +76,7 @@
 - 旧 MySQL 数据卷（含改名前的 `mall-learning_mysql-data`）需执行一次 `docs/sql/zz-migration-v1.4.sql`（可重复执行）；改名后 compose 新建 `mall-consistency-lab_mysql-data` 全新卷，迁移脚本自动生效。
 - 存量 JWT 无 role claim：旧 token 需重新登录才能获得 ADMIN 语义（守卫读取的 mall_user 也随登录刷新）。
 - 跨服务库存一致性采用幂等扣减 + 状态查询 + 补偿恢复，不引入分布式事务框架；进程崩溃窗口由定时对账兜底收敛（2026-09-03 起有混沌测试脚本可重复验证，见上节）。
-- 支付为模拟实现；发货仅流转订单状态，不填物流单号，无超时自动关单。
+- 支付为模拟实现；发货仅流转订单状态，不填物流单号；超时自动关单已于 v1.6 实现（默认下单 30 分钟未支付自动取消并回补，三方 CAS 竞态分析见 CONSISTENCY.md）。
 - v1.2 起收货地址为真实服务（mall_user.address 表），历史遗留订单的 address_id 仍指向旧静态数据属正常现象；新订单均含 receiver_* 快照列。
 - 头像与商品图片均为 URL 字符串，不做文件上传/OSS。
 - admin 构建存在 Vite chunk 大小警告，不影响功能与构建结果。

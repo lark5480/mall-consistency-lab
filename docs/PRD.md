@@ -230,7 +230,7 @@ order_item 冗余 `image_url` 列：下单时固化商品图片，商家后续�
 | 真实支付网关 | 仅提供模拟支付接口 |
 | 分布式事务 | 库存扣减仅用乐观锁 + 幂等键保障，不引入 Seata 等 |
 | 文件上传/OSS | 头像与商品图均为 URL 字符串 |
-| PENDING 超时自动关单 | 不做；PENDING 订单需用户手动支付或取消。现有定时任务仅两个：SHIPPED 超时自动完成（OrderAutoCompleteTask）与孤儿扣减对账补偿（OrphanDeductionReconcileJob），详见 CONSISTENCY.md |
+| PENDING 超时自动关单 | v1.0 时声明不做；v1.6 已实现：下单 N 分钟未支付自动取消并回补（OrderAutoCloseTask，默认 30 分钟），现有定时任务共三个，三方 CAS 竞态分析详见 CONSISTENCY.md |
 
 ## 8. 术语表
 
