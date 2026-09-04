@@ -58,8 +58,8 @@
 
 | 优先级 | 事项 | 来源与理由 |
 |---|---|---|
-| P0 | **混沌测试脚本**：在 Saga 中途 kill order-service（如扣减成功后、落单前），重启后验证对账任务自动回补、库存最终一致 | 印证自 Chorus 的 chaos test；直接补掉 ACCEPTANCE 已知限制"极端进程崩溃窗口靠 ERROR 日志暴露"——从"承认边界"变成"证明边界可恢复"，是定位内最强的增强 |
-| P1 | **PENDING 超时自动关单**：定时扫描（沿用现有 auto-complete 任务的模式，不为此引入 MQ） | 印证自 mall 的延迟关单；补掉 CONSISTENCY.md 已声明的已知边界，且与现有"定时任务不加分布式锁"决策兼容 |
+| P0 ✅ 已完成（2026-09-03，[scripts/chaos-test.sh](../scripts/chaos-test.sh)） | **混沌测试脚本**：在 Saga 中途 kill order-service（如扣减成功后、落单前），重启后验证对账任务自动回补、库存最终一致 | 印证自 Chorus 的 chaos test；直接补掉 ACCEPTANCE 已知限制"极端进程崩溃窗口靠 ERROR 日志暴露"——从"承认边界"变成"证明边界可恢复"，是定位内最强的增强 |
+| P1 ✅ 已完成（2026-09-03，v1.6 自动关单） | **PENDING 超时自动关单**：定时扫描（沿用现有 auto-complete 任务的模式，不为此引入 MQ） | 印证自 mall 的延迟关单；补掉 CONSISTENCY.md 已声明的已知边界，且与现有"定时任务不加分布式锁"决策兼容 |
 | P2 | 秒杀场景（Redis 预扣 + 限流） | mall/newbee-mall-plus 都有；但 DECISIONS 已明确指向作者另一个项目 flash-sale，**不在本仓库做**，避免稀释定位 |
 | 不做 | 购物车/优惠券/ES 搜索/多租户/代码生成器 | 广度型赛道的事，做了只会让"深度"的声明变假 |
 

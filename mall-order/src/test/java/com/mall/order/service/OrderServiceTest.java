@@ -54,7 +54,7 @@ class OrderServiceTest {
         PlatformTransactionManager txManager = Mockito.mock(PlatformTransactionManager.class);
         Mockito.when(txManager.getTransaction(Mockito.any())).thenReturn(new SimpleTransactionStatus());
         orderService = new OrderService(orderMapper, orderItemMapper, productClient, userClient,
-                new ObjectMapper(), new TransactionTemplate(txManager), 7L);
+                new ObjectMapper(), new TransactionTemplate(txManager), 7L, 30L);
     }
 
     private AddressDTO address() {
@@ -359,5 +359,50 @@ class OrderServiceTest {
         Mockito.when(orderMapper.update(Mockito.isNull(), Mockito.any())).thenReturn(0);
 
         assertEquals(0, orderService.autoCompleteExpiredOrders());
+    }
+
+    @Test
+    void autoCloseShouldCancelAndRestoreWhenCasWins() {
+        Order expired = pendingOrder("ORD-CLOSE-1");
+        Mockito.when(orderMapper.selectList(Mockito.any())).thenReturn(List.of(expired));
+        Mockito.when(orderMapper.update(Mockito.isNull(), Mockito.any())).thenReturn(1);
+        stubItems(99L);
+        Mockito.when(productClient.restoreStock(Mockito.eq(1L), ArgumentMatchers.anyMap()))
+                .thenReturn(Result.ok(true));
+
+        int closed = orderService.autoCloseExpiredPendingOrders();
+
+        assertEquals(1, closed);
+        // 先 CAS 抢到 CANCELLED，再回补库存（顺序锁定）
+        InOrder inOrder = Mockito.inOrder(orderMapper, productClient);
+        inOrder.verify(orderMapper).update(Mockito.isNull(), Mockito.any());
+        inOrder.verify(productClient).restoreStock(Mockito.eq(1L), ArgumentMatchers.anyMap());
+    }
+
+    @Test
+    void autoCloseShouldNotTouchStockWhenCasLoses() {
+        // 并发 pay 在超时边界抢先 CAS 成功：自动关单影响 0 行，必须零库存动作
+        Order paidConcurrently = pendingOrder("ORD-CLOSE-2");
+        Mockito.when(orderMapper.selectList(Mockito.any())).thenReturn(List.of(paidConcurrently));
+        Mockito.when(orderMapper.update(Mockito.isNull(), Mockito.any())).thenReturn(0);
+
+        int closed = orderService.autoCloseExpiredPendingOrders();
+
+        assertEquals(0, closed);
+        Mockito.verify(productClient, Mockito.never())
+                .restoreStock(Mockito.anyLong(), ArgumentMatchers.anyMap());
+    }
+
+    @Test
+    void autoCloseShouldStayCancelledWhenRestoreFails() {
+        // 回补失败不回滚也不外抛：订单已终态 CANCELLED，欠账由对账任务兜底
+        Order expired = pendingOrder("ORD-CLOSE-3");
+        Mockito.when(orderMapper.selectList(Mockito.any())).thenReturn(List.of(expired));
+        Mockito.when(orderMapper.update(Mockito.isNull(), Mockito.any())).thenReturn(1);
+        stubItems(99L);
+        Mockito.when(productClient.restoreStock(Mockito.eq(1L), ArgumentMatchers.anyMap()))
+                .thenThrow(Mockito.mock(FeignException.class));
+
+        assertEquals(1, orderService.autoCloseExpiredPendingOrders());
     }
 }

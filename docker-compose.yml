@@ -111,6 +111,10 @@ services:
       AUTO_COMPLETE_DAYS: ${AUTO_COMPLETE_DAYS:-7}
       AUTO_COMPLETE_INTERVAL_MS: ${AUTO_COMPLETE_INTERVAL_MS:-300000}
       AUTO_COMPLETE_INITIAL_DELAY_MS: ${AUTO_COMPLETE_INITIAL_DELAY_MS:-60000}
+      # 超时自动关单：默认下单 30 分钟未支付自动取消并回补库存，每 5 分钟扫描一轮
+      AUTO_CLOSE_MINUTES: ${AUTO_CLOSE_MINUTES:-30}
+      AUTO_CLOSE_INTERVAL_MS: ${AUTO_CLOSE_INTERVAL_MS:-300000}
+      AUTO_CLOSE_INITIAL_DELAY_MS: ${AUTO_CLOSE_INITIAL_DELAY_MS:-90000}
     depends_on:
       mysql: { condition: service_healthy }
       nacos: { condition: service_healthy }

@@ -42,6 +42,7 @@ stateDiagram-v2
     [*] --> PENDING: 下单
     PENDING --> PAID: C端模拟支付
     PENDING --> CANCELLED: C端取消（先CAS落终态，再回补库存）
+    PENDING --> CANCELLED: 超时定时自动关单（同一CAS纪律）
     PAID --> SHIPPED: B端发货
     SHIPPED --> COMPLETED: 用户确认收货
     SHIPPED --> COMPLETED: 超时定时自动完成
@@ -112,13 +113,33 @@ stateDiagram-v2
 pay / cancel / ship / complete 四个入口**全部收敛到 `transition()`**，不存在绕过 CAS 的写路径。
 取消路径额外利用 CAS 消除时序竞态：**先 CAS 落 CANCELLED、再远程回补库存**——若反过来（先回补后 CAS），并发支付可在回补完成后抢先成功，库存已回补且 dedup 已 RESTORED，再无机制扣回，形成"已支付订单 + 凭空多出的库存"；先 CAS 则同一订单的支付/取消必有一个赢家。回补失败的欠账由⑤按"订单已取消"兜底。
 
+**三方竞态分析：pay vs 手动 cancel vs 定时 auto-close（v1.6 引入 auto-close 前置分析）**
+
+三个写者竞争同一 PENDING 订单，仲裁规则完全依赖⑥的 CAS，auto-close 必须与手动 cancel 遵守同一纪律（先 CAS 抢终态、赢了才回补，输了零动作）：
+
+| 时序场景 | 仲裁过程 | 结果 |
+|---|---|---|
+| auto-close 与 pay 在超时边界并发 | 双方都读到 PENDING；CAS 串行化，仅一方 UPDATE 影响行数=1 | pay 赢 → auto-close 影响 0 行**直接跳过、绝不回补**（库存归 PAID 订单持有）；auto-close 赢 → pay 的 transition CAS 失败抛 409 |
+| auto-close 与手动 cancel 并发 | 双方目标态一致（CANCELLED），CAS 先到先得 | 任一方赢，输家影响 0 行跳过；回补至多发生一次（且②的 DEDUCTED→RESTORED 闸门再兜一层） |
+| auto-close CAS 赢了但回补失败 | 订单已 CANCELLED 终态，dedup 仍 DEDUCTED | 与手动取消同路径：⑤对账任务按「订单已 CANCELLED」回补欠账，最终一致 |
+
+关键不变式：**CAS 失败方不得执行任何库存动作**——这是"已支付订单 + 凭空多出的库存"不可能再现的充分条件（v1.4 P0 bug 的教训直接继承）。另外 auto-close 的回补在方法事务之外执行（方法不加 @Transactional）：批量 CAS 是逐条独立单语句提交，Feign 回补期间不持有 DB 连接，与③的短事务原则一致。
+
 ### 附：超时自动完成（业务功能，复用上述机制）
 
 | 项 | 内容 |
 |---|---|
 | 功能 | 发货超过 N 天未确认收货自动置 COMPLETED（对齐主流电商） |
 | 定时器 | `mall-order/src/main/java/com/mall/order/task/OrderAutoCompleteTask.java` |
-| 批量逻辑 | `OrderService.autoCompleteExpiredOrders()` |
+| 批量逻辑 | `OrderService.autoCompleteExpiredOrders()`（方法级事务内纯本地 CAS，无远程调用） |
+
+### 附：超时自动关单（业务功能，与手动取消同一 CAS 纪律）
+
+| 项 | 内容 |
+|---|---|
+| 功能 | 下单超过 N 分钟仍 PENDING（未支付）自动置 CANCELLED 并回补库存 |
+| 定时器 | `mall-order/src/main/java/com/mall/order/task/OrderAutoCloseTask.java` |
+| 批量逻辑 | `OrderService.autoCloseExpiredPendingOrders()`——逐条 `WHERE id=? AND status='PENDING'` CAS；**影响行数=1 才回补**，=0（被并发 pay/取消抢走）直接跳过；方法不加事务，Feign 回补期间不持 DB 连接；回补失败由⑤兜底。竞态全表分析见上文「三方竞态分析」 |
 
 ---
 
@@ -129,6 +150,9 @@ pay / cancel / ship / complete 四个入口**全部收敛到 `transition()`**，
 | `mall.order.auto-complete-days` | `AUTO_COMPLETE_DAYS` | 7 | 发货 N 天后自动完成 |
 | `mall.order.auto-complete-interval-ms` | `AUTO_COMPLETE_INTERVAL_MS` | 300000 | 自动完成任务扫描周期 |
 | `mall.order.auto-complete-initial-delay-ms` | `AUTO_COMPLETE_INITIAL_DELAY_MS` | 60000 | 启动后首轮延迟 |
+| `mall.order.auto-close-minutes` | `AUTO_CLOSE_MINUTES` | 30 | 下单 N 分钟未支付自动关单 |
+| `mall.order.auto-close-interval-ms` | `AUTO_CLOSE_INTERVAL_MS` | 300000 | 自动关单任务扫描周期 |
+| `mall.order.auto-close-initial-delay-ms` | `AUTO_CLOSE_INITIAL_DELAY_MS` | 90000 | 启动后首轮延迟 |
 | `mall.product.reconcile-stale-minutes` | `RECONCILE_STALE_MINUTES` | 10 | 扣减记录视为孤儿的最小年龄 |
 | `mall.product.reconcile-interval-ms` | `RECONCILE_INTERVAL_MS` | 300000 | 对账任务扫描周期 |
 | `mall.product.reconcile-initial-delay-ms` | `RECONCILE_INITIAL_DELAY_MS` | 120000 | 启动后首轮延迟 |
@@ -139,7 +163,7 @@ pay / cancel / ship / complete 四个入口**全部收敛到 `transition()`**，
 ## 4. 验证方式索引
 
 **单元测试**
-- `mall-order/src/test/java/com/mall/order/service/OrderServiceTest.java`（19 例）：CAS 成功/失败(40002)、补偿触发、不确定结果处理、取消先 CAS 后回补（顺序锁定）、回补失败不阻断取消、自动完成与冲突跳过等
+- `mall-order/src/test/java/com/mall/order/service/OrderServiceTest.java`（22 例）：CAS 成功/失败(40002)、补偿触发、不确定结果处理、取消先 CAS 后回补（顺序锁定）、回补失败不阻断取消、自动完成与冲突跳过、自动关单三方竞态（CAS 赢先关单后回补 / CAS 输零库存动作 / 回补失败保持已取消）等
 - `mall-product/src/test/java/com/mall/product/task/OrphanDeductionReconcileJobTest.java`（6 例）：孤儿回补、正常订单跳过、已取消订单回补、状态不明跳过、订单服务宕机容忍、RESTORED 清理
 - `mall-product/src/test/java/com/mall/product/service/ProductServiceTest.java`（8 例）：含幂等占位先行顺序锁定、同单号并发重试零净效果回归、回补量取记录值、库存增减路径
 
@@ -153,6 +177,7 @@ pay / cancel / ship / complete 四个入口**全部收敛到 `transition()`**，
 | 孤儿对账 | 手工扣 1 件库存 + 插入 30 分钟前 DEDUCTED 记录（订单表无此单号） | 一轮任务后日志 `Reconciled orphan stock deduction`，库存回补，记录变 RESTORED ✅ |
 | 全链路回归 | 下单→支付→发货→确认收货；取消路径 | 状态流转正确、库存回补正确 ✅ |
 | 自动完成 | 发货后不点收货，`AUTO_COMPLETE_DAYS=0` 快速轮询 | 到期自动 COMPLETED，重复确认被 409 拦截 ✅ |
+| 自动关单（2026-09-04） | 下单 3 件不支付，`AUTO_CLOSE_MINUTES=1 AUTO_CLOSE_INTERVAL_MS=15000` 加速 | 1 分钟后自动 CANCELLED、库存 82→79→82 回补、关单后再支付 409/40002 被拦 ✅（首轮还批量关闭了混沌测试遗留的 15 笔 PENDING 订单，逐笔回补） |
 
 ## 5. 边界与演进（为什么不引入 Seata）
 

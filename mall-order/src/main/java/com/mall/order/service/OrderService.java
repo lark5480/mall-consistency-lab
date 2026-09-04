@@ -58,11 +58,14 @@ public class OrderService {
     private final TransactionTemplate transactionTemplate;
     /** 发货后超过该天数仍未确认收货则自动完成 */
     private final long autoCompleteDays;
+    /** 下单后超过该分钟数仍未支付则自动关单 */
+    private final long autoCloseMinutes;
 
     public OrderService(OrderMapper orderMapper, OrderItemMapper orderItemMapper,
                         ProductClient productClient, UserClient userClient, ObjectMapper objectMapper,
                         TransactionTemplate transactionTemplate,
-                        @Value("${mall.order.auto-complete-days:7}") long autoCompleteDays) {
+                        @Value("${mall.order.auto-complete-days:7}") long autoCompleteDays,
+                        @Value("${mall.order.auto-close-minutes:30}") long autoCloseMinutes) {
         this.orderMapper = orderMapper;
         this.orderItemMapper = orderItemMapper;
         this.productClient = productClient;
@@ -70,6 +73,7 @@ public class OrderService {
         this.objectMapper = objectMapper;
         this.transactionTemplate = transactionTemplate;
         this.autoCompleteDays = autoCompleteDays;
+        this.autoCloseMinutes = autoCloseMinutes;
     }
 
     /**
@@ -185,6 +189,41 @@ public class OrderService {
     public InternalOrderState stateByOrderNo(String orderNo) {
         Order order = orderMapper.selectOne(new QueryWrapper<Order>().eq("order_no", orderNo).last("LIMIT 1"));
         return order == null ? InternalOrderState.missing() : new InternalOrderState(true, order.getStatus());
+    }
+
+    // ---------- 定时任务：超时自动关单 ----------
+
+    /**
+     * 将下单超过 N 分钟仍未支付的订单批量置为 CANCELLED 并回补库存（对齐电商平台的超时关单）。
+     * 与手动取消遵守同一 CAS 纪律：先条件更新抢到终态、赢了才回补，输了（并发 pay/取消抢先）零动作——
+     * CAS 失败方执行任何库存动作都可能造成"已支付订单 + 凭空多出的库存"。
+     * 方法刻意不加事务：逐条 CAS 单语句独立提交，Feign 回补期间不持有数据库连接（与下单链路短事务原则一致）。
+     *
+     * @return 本轮实际关闭的订单数
+     */
+    public int autoCloseExpiredPendingOrders() {
+        LocalDateTime deadline = LocalDateTime.now().minusMinutes(autoCloseMinutes);
+        List<Order> expired = orderMapper.selectList(new QueryWrapper<Order>()
+                .eq("status", OrderStatus.PENDING.name())
+                .lt("created_at", deadline)
+                .last("LIMIT " + AUTO_COMPLETE_BATCH));
+        int closed = 0;
+        for (Order order : expired) {
+            int updated = orderMapper.update(null, new UpdateWrapper<Order>()
+                    .eq("id", order.getId())
+                    .eq("status", OrderStatus.PENDING.name())
+                    .set("status", OrderStatus.CANCELLED.name())
+                    .set("updated_at", LocalDateTime.now()));
+            if (updated == 1) {
+                log.info("Auto-closed expired pending order: orderNo={}", order.getOrderNo());
+                restoreStockQuietly(order);
+                closed++;
+            } else {
+                // 状态已被并发 pay/取消改走：CAS 输家不得触碰库存
+                log.warn("Auto-close skipped (state changed concurrently): orderNo={}", order.getOrderNo());
+            }
+        }
+        return closed;
     }
 
     // ---------- B 端管理查询 ----------

@@ -24,7 +24,7 @@ feign:
         connect-timeout: 2000
         read-timeout: 5000
 
-# 超时自动确认收货：发货 N 天后由定时任务置为已完成（演示环境可调小天数/周期观察）
+# 超时任务：发货 N 天未确认自动完成；下单 N 分钟未支付自动关单（演示环境可调小观察）
 # JWT 密钥缺失时启动即失败（JwtSecurityInitializer），不再静默降级到内置默认密钥
 mall:
   jwt:
@@ -33,6 +33,9 @@ mall:
     auto-complete-days: ${AUTO_COMPLETE_DAYS:7}
     auto-complete-interval-ms: ${AUTO_COMPLETE_INTERVAL_MS:300000}
     auto-complete-initial-delay-ms: ${AUTO_COMPLETE_INITIAL_DELAY_MS:60000}
+    auto-close-minutes: ${AUTO_CLOSE_MINUTES:30}
+    auto-close-interval-ms: ${AUTO_CLOSE_INTERVAL_MS:300000}
+    auto-close-initial-delay-ms: ${AUTO_CLOSE_INITIAL_DELAY_MS:90000}
 
 management:
   endpoints:

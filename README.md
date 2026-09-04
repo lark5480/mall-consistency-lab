@@ -44,6 +44,8 @@ sequenceDiagram
 
 集成测试直接复现两个 P0 bug 的并发场景，是修复的回归防线。本地无 Docker 自动跳过；CI（ubuntu runner）真实执行。
 
+另有**混沌测试**（手动执行）：`bash scripts/chaos-test.sh` 在下单流量中随机 `docker kill` order-service，验证对账任务把「已扣库存未落单」的孤儿全部回补、库存台账守恒——进程级故障下的最终一致性可重复证明，记录见 [docs/ACCEPTANCE.md](docs/ACCEPTANCE.md)。
+
 ```bash
 mvn -B test    # 全部测试；无 Docker 时集成层自动 skip
 ```
@@ -154,6 +156,6 @@ mall-consistency-lab-frontend  pnpm workspace（B/C 两端 + 共享 TS 类型包
 | 收货地址 | **v1.2 起为真实服务**：mall_user 库 address 表 + CRUD API；下单时由 order 服务经内部接口固化收货人快照到订单表，跨库不做 join。 |
 | Redis | 仅用于一处：product-service 缓存商品详情，TTL 10 分钟，商品修改/删除/库存变动时主动失效（事务提交后执行）。 |
 | 购物车 / 优惠券 / 物流 | 本期不做。发货仅流转状态（PAID→SHIPPED），不填物流单号。 |
-| 订单取消 | PENDING 订单可取消：先 CAS 落 CANCELLED 再幂等回补库存；失败由对账任务兜底；不做超时自动关单（已知边界，见 CONSISTENCY.md）。 |
+| 订单取消 | PENDING 订单可取消：先 CAS 落 CANCELLED 再幂等回补库存；失败由对账任务兜底；下单超时未支付由定时任务自动关单（默认 30 分钟，三方 CAS 竞态分析见 CONSISTENCY.md）。 |
 | 角色权限 | 区分 USER/ADMIN：注册默认 USER；网关强制校验 `POST/PUT/DELETE /api/v1/products/**` 与**全部 `/api/v1/admin/**`** 必须 ADMIN。种子管理员 admin/admin123 仅本地演示。 |
 | 订单状态 | PENDING→PAID→SHIPPED→COMPLETED 与 PENDING→CANCELLED；全部流转经状态机 CAS。 |
