@@ -128,7 +128,7 @@ pnpm --filter @mall/vue3-mall dev
 |---|---|
 | 不用 Seata | 跨服务写操作只有「扣库存」一处，幂等+补偿+对账已构成闭环；Seata AT 需要每个参与方建 undo_log 且全局锁拖吞吐，为单一写场景引入整套框架不成比例 |
 | 不用 MQ | 下单必须同步确认实时库存（异步化会出现"下单成功但库存未扣"窗口）；扣库存接口刻意不重试（盲目重试可能超卖），超时走「查状态再决策」而非盲目补偿 |
-| 程序员式幂等而非 Redis SETNX | DB 唯一键是并发唯一性的可靠裁判，重启后语义不丢失；Redis 预扣适合秒杀场景（见作者另一项目 flash-sale），常规交易链路同步更简单可解释 |
+| 程序员式幂等而非 Redis SETNX | DB 唯一键是并发唯一性的可靠裁判，重启后语义不丢失；Redis 预扣适合秒杀场景（见作者另一项目 [flash-sale](https://github.com/lark5480/flash-sale)），常规交易链路同步更简单可解释 |
 | 定时任务不加分布式锁 | 单实例部署假设已文档化；重复执行不破坏正确性（CAS + 幂等兜底），扩多实例前引入 ShedLock 即可 |
 
 ## 目录结构
@@ -146,6 +146,7 @@ mall-product            商品服务（库存一致性核心 + 对账任务）
 mall-order              订单服务（Saga 编排 + 状态机）
 mall-consistency-lab-frontend  pnpm workspace（B/C 两端 + 共享 TS 类型包）
 .github/workflows       CI（后端测试含 Testcontainers / 前端构建 / 镜像构建）
+AGENTS.md / CLAUDE.md   AI 编码 Agent 的仓库约定（CLAUDE.md 仅路由，内容以 AGENTS.md 为准）
 ```
 
 ## 简化边界
