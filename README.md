@@ -122,6 +122,8 @@ pnpm --filter @mall/vue3-admin dev
 pnpm --filter @mall/vue3-mall dev
 ```
 
+> 使用 AI 编码工具（Claude Code / Cursor / Codex 等）的贡献者，改动前请先阅读仓库根目录的 [AGENTS.md](AGENTS.md)——AI 与人类贡献者共享同一套硬约束与自检清单，人类贡献流程另见 [CONTRIBUTING.md](CONTRIBUTING.md)。
+
 ## 设计取舍（为什么"不用"也是一种方案）
 
 | 决策 | 理由（详见 DECISIONS.md / CONSISTENCY.md） |

@@ -85,6 +85,7 @@ pnpm --filter @mall/vue3-mall  dev
 4. 动了一致性机制或新增定时任务 → 更新 `docs/CONSISTENCY.md`（含配置键汇总表）与 `docs/DECISIONS.md`。
 5. 新增/修改的行为若影响面上说明 → 同步 `README.md` 的「简化边界」「测试矩阵」等表。
 6. 测试矩阵数字（当前：单测 59 例 / 集成 4 例）变化时一并更新 README。
+7. 修改了启动命令 / 环境变量 / 演示账号 → 同步更新 `README.md` 的「快速启动」与本文 §3；两处内容冲突时以 `README.md` 为准并回改本文。
 
 ## 6. 协作约定
 
