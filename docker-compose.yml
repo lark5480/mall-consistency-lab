@@ -89,6 +89,7 @@ services:
       RECONCILE_STALE_MINUTES: ${RECONCILE_STALE_MINUTES:-10}
       RECONCILE_INTERVAL_MS: ${RECONCILE_INTERVAL_MS:-300000}
       RECONCILE_INITIAL_DELAY_MS: ${RECONCILE_INITIAL_DELAY_MS:-120000}
+      RECONCILE_RETAIN_RESTORED_DAYS: ${RECONCILE_RETAIN_RESTORED_DAYS:-7}
     depends_on:
       mysql: { condition: service_healthy }
       redis: { condition: service_healthy }

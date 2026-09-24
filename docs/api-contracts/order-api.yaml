@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
   title: Mall Order API
-  version: 1.2.0
+  version: 1.2.1
 paths:
   /api/v1/orders:
     get:
@@ -46,6 +46,17 @@ paths:
       parameters: [{ name: orderNo, in: path, required: true, schema: { type: string } }]
       responses:
         "200": { description: Cancelled, content: { application/json: { schema: { $ref: '#/components/schemas/OrderResult' } } } }
+        "409": { description: Invalid state, content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } } }
+        "404": { description: Not owned or missing }
+        "401": { $ref: '#/components/responses/Unauthorized' }
+  /api/v1/orders/{orderNo}/complete:
+    post:
+      operationId: completeOrder
+      security: [{ bearerAuth: [] }]
+      description: C 端确认收货，仅 SHIPPED→COMPLETED；全部流转经状态机 CAS，冲突返回 409(40002)。另有超时自动完成任务（SHIPPED 超 N 天自动置 COMPLETED，同一 CAS 纪律）。
+      parameters: [{ name: orderNo, in: path, required: true, schema: { type: string } }]
+      responses:
+        "200": { description: Completed, content: { application/json: { schema: { $ref: '#/components/schemas/OrderResult' } } } }
         "409": { description: Invalid state, content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } } }
         "404": { description: Not owned or missing }
         "401": { $ref: '#/components/responses/Unauthorized' }
