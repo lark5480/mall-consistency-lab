@@ -67,7 +67,7 @@ pnpm --filter @mall/vue3-mall  dev
 
 ## 4. 硬约束（违反即破坏一致性，评审必打回）
 
-1. **CAS 失败方不得执行任何库存动作。** pay / cancel / ship / complete / auto-close 五个入口全部收敛到 `OrderService.transition()`，条件更新影响行数 ≠ 1 即抛 `ORDER_STATE_ERROR`（40002 / HTTP 409）。禁止新增绕过 `transition()` 的订单状态写路径。
+1. **CAS 失败方不得执行任何库存动作。** 手动流转 pay / cancel / ship / complete 四个入口全部收敛到 `OrderService.transition()`，条件更新影响行数 ≠ 1 即抛 `ORDER_STATE_ERROR`（40002 / HTTP 409）；超时自动关单 `autoCloseExpiredPendingOrders()` 是遵守同一纪律的独立行级 CAS（`status='PENDING'` 才置 CANCELLED，输家跳过、不触库存），与 CONSISTENCY.md ⑥ 的口径一致。禁止新增绕过 CAS 的订单状态写路径。
 2. **取消订单的顺序是：先 CAS 落 CANCELLED，再远程回补库存。** 反过来会产生"已支付订单 + 凭空多出的库存"（v1.4 P0 bug 的直接教训）。
 3. **Feign 调用必须在 DB 事务之外。** 下单落库用 `TransactionTemplate` 编程式短事务包裹，不得用 `@Transactional` 把远程调用圈进事务。
 4. **扣库存接口不盲目重试。** 超时/结果不明时先查 `stockStatus(orderNo)` 再决策；重试会超卖。
@@ -84,7 +84,7 @@ pnpm --filter @mall/vue3-mall  dev
 3. 动了 HTTP 接口 → 同步更新 `docs/api-contracts/` 对应 OpenAPI 文件。
 4. 动了一致性机制或新增定时任务 → 更新 `docs/CONSISTENCY.md`（含配置键汇总表）与 `docs/DECISIONS.md`。
 5. 新增/修改的行为若影响面上说明 → 同步 `README.md` 的「简化边界」「测试矩阵」等表。
-6. 测试矩阵数字（当前：单测 59 例 / 集成 4 例）变化时一并更新 README。
+6. 测试矩阵数字（当前：单测 62 例 / 集成 4 例）变化时一并更新 README。
 7. 修改了启动命令 / 环境变量 / 演示账号 → 同步更新 `README.md` 的「快速启动」与本文 §3；两处内容冲突时以 `README.md` 为准并回改本文。
 
 ## 6. 协作约定

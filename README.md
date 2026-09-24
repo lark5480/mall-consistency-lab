@@ -39,7 +39,7 @@ sequenceDiagram
 
 | 层级 | 数量 | 覆盖 |
 |---|---|---|
-| 单元测试（Mockito） | 59 例 | Saga 各分支：扣减/补偿/不确定结果/状态机 CAS 冲突/越权/自动完成冲突跳过 |
+| 单元测试（Mockito） | 62 例 | Saga 各分支：扣减/补偿/不确定结果/状态机 CAS 冲突/越权/自动完成冲突跳过/自动关单三方竞态 |
 | 集成测试（Testcontainers，真实 MySQL + Redis） | 4 例 | **同单号 16 线程并发扣减只扣一次**、8 线程并发回补幂等、对账孤儿回补/正常订单不误补、事务提交后缓存失效 |
 
 集成测试直接复现两个 P0 bug 的并发场景，是修复的回归防线。本地无 Docker 自动跳过；CI（ubuntu runner）真实执行。
@@ -61,7 +61,7 @@ mvn -B test    # 全部测试；无 Docker 时集成层自动 skip
 | 存储 | MySQL 8.0.36（三库分库）、Redis 7.2（商品缓存）、Nacos Server v3.0.3（服务发现） |
 | 前端 | Vue 3.4 + Vite 5.2 + TypeScript（B 端 Element Plus / C 端 Vant，pnpm monorepo + 共享类型包） |
 | 测试 | JUnit 5 + Mockito + Testcontainers 1.2x |
-| 部署 / CI | Docker Compose（6 服务编排 + 健康检查依赖链）、GitHub Actions |
+| 部署 / CI | Docker Compose（7 服务编排 + 健康检查依赖链）、GitHub Actions |
 
 > 版本组合依据 SCA 官方适配矩阵：Spring Cloud Alibaba 2025.0.0.0 → Spring Cloud 2025.0.x → Spring Boot 3.5.x（nacos-client 3.0.3 ↔ nacos-server v3.0.3）。
 

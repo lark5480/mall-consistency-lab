@@ -2,7 +2,7 @@
 
 ## 编译总检
 
-- 后端：`mvn -q -DskipTests package` 通过（本机 JDK 21 编译，Maven `release=17` 锁定字节码目标）。
+- 后端：`mvn -q -DskipTests package` 通过（本机 JDK 21 编译，Maven 字节码目标 Java 21，随 v1.5 升级由 17 上调）。
 - 后端测试：`mvn -B test` 通过，0 失败（2026-09-02 复跑：order 模块 19 例 + 各模块合计；Testcontainers 集成测试在真实 Docker 环境执行）。
 - 前端：`pnpm -r build` 通过，两个应用均执行 `vue-tsc --noEmit && vite build`。
 - 契约：auth(1.1.0)/user(1.0.0)/product(1.1.0)/order(1.2.0)/admin(1.0.0) 五个 YAML 可被 js-yaml 解析。
