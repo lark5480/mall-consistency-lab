@@ -44,7 +44,7 @@ sequenceDiagram
 
 集成测试直接复现两个 P0 bug 的并发场景，是修复的回归防线。本地无 Docker 自动跳过；CI（ubuntu runner）真实执行。
 
-另有**混沌测试**（手动执行）：`bash scripts/chaos-test.sh` 在下单流量中随机 `docker kill` order-service，验证对账任务把「已扣库存未落单」的孤儿全部回补、库存台账守恒——进程级故障下的最终一致性可重复证明，记录见 [docs/ACCEPTANCE.md](docs/ACCEPTANCE.md)。
+另有**混沌测试**（手动执行）：`bash scripts/chaos-test.sh` 在下单流量中随机 `docker kill` order-service，验证对账任务把「已扣库存未落单」的孤儿全部回补、库存台账守恒——进程级故障下的最终一致性可重复证明，记录见 [docs/ACCEPTANCE.md](docs/ACCEPTANCE.md)。Windows 下可用 `pwsh scripts/chaos-test.ps1`：同一测试的原生版，不需要 WSL 访问 docker daemon，并额外输出对账差异率 / 补偿成功率 / 故障恢复耗时三项度量。
 
 ```bash
 mvn -B test    # 全部测试；无 Docker 时集成层自动 skip

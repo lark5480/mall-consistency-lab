@@ -32,6 +32,8 @@ mall-order      :8083           订单 Saga 编排 + 状态机          → MySQ
 mall-consistency-lab-frontend   pnpm workspace：packages/vue3-admin(:3000) + packages/vue3-mall(:3001) + shared 共享类型
 docs/                           见第 1 节路由表
 scripts/chaos-test.sh           混沌测试（随机 kill order-service 验证对账兜底）
+scripts/chaos-test.ps1          同一测试的 Windows 原生版，多输出对账差异率/补偿成功率/恢复耗时
+                                （WSL 访问不到 docker daemon 时用这个）
 ```
 
 三库分库（`mall_user` / `mall_product` / `mall_order`），**跨库不做 join**，需要跨服务数据走 Feign 或快照字段。
